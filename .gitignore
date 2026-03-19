@@ -1,0 +1,6 @@
+./Emotion_Data_All_Videos
+*.csv
+*.json  
+*.mp4
+/Footage
+__pycache__/

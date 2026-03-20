@@ -170,12 +170,14 @@ def cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
 
 @dataclass
 class FilterConfig:
+    # Study-friendly defaults: analyse every eligible row with a direct threshold decision.
+    use_continuity: bool = False
     sim_thresh_on: float = 0.42
     sim_thresh_off: float = 0.38
     min_run_seconds: float = 0.5
     max_minutes: Optional[int] = None
     seek_mode: str = "timestamp"  # timestamp | frame
-    sample_step: int = 30          # process every Nth eligible row then forward-fill
+    sample_step: int = 1           # process every Nth eligible row then forward-fill
     conf_col: Optional[str] = None
     conf_thresh: float = 0.0
     forced_header_row: Optional[int] = None
@@ -250,25 +252,29 @@ def identity_filter(
                 if emb is not None:
                     sim = cosine_sim(emb, ref_centroid)
 
-                    # Hysteresis state transition to reduce flicker on cutaways
-                    if active:
-                        if sim >= cfg.sim_thresh_off:
-                            decision = True
-                        else:
-                            active = False
-                            run_count = 0
-                            decision = False
+                    if not cfg.use_continuity:
+                        # Simple study mode: per-row threshold only.
+                        decision = sim >= cfg.sim_thresh_on
                     else:
-                        if sim >= cfg.sim_thresh_on:
-                            run_count += 1
-                            if run_count >= min_run_samples:
-                                active = True
+                        # Hysteresis state transition to reduce flicker on cutaways
+                        if active:
+                            if sim >= cfg.sim_thresh_off:
                                 decision = True
                             else:
+                                active = False
+                                run_count = 0
                                 decision = False
                         else:
-                            run_count = 0
-                            decision = False
+                            if sim >= cfg.sim_thresh_on:
+                                run_count += 1
+                                if run_count >= min_run_samples:
+                                    active = True
+                                    decision = True
+                                else:
+                                    decision = False
+                            else:
+                                run_count = 0
+                                decision = False
                 else:
                     # no face in frame -> reset state
                     active = False
@@ -344,12 +350,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--out_csv", required=True, help="Frame-level output CSV path")
     p.add_argument("--minute_csv", required=True, help="Minute summary output CSV path")
 
+    p.add_argument("--use_continuity", action="store_true", help="Enable continuity + hysteresis logic")
     p.add_argument("--sim_thresh_on", type=float, default=0.42, help="Enter threshold for subject state")
     p.add_argument("--sim_thresh_off", type=float, default=0.38, help="Exit threshold for subject state")
     p.add_argument("--min_run_seconds", type=float, default=0.5, help="Min continuous run before enabling subject state")
     p.add_argument("--max_minutes", type=int, default=None, help="Optional limit to first N minutes")
     p.add_argument("--seek_mode", choices=["timestamp", "frame"], default="timestamp")
-    p.add_argument("--sample_step", type=int, default=30, help="Analyse every Nth eligible row")
+    p.add_argument("--sample_step", type=int, default=1, help="Analyse every Nth eligible row")
     p.add_argument("--conf_col", default=None, help="Optional confidence column name")
     p.add_argument("--conf_thresh", type=float, default=0.0, help="Confidence threshold")
     p.add_argument("--forced_header_row", type=int, default=None, help="Force CSV header row index (0-based)")
@@ -359,6 +366,7 @@ def parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_args()
     cfg = FilterConfig(
+        use_continuity=args.use_continuity,
         sim_thresh_on=args.sim_thresh_on,
         sim_thresh_off=args.sim_thresh_off,
         min_run_seconds=args.min_run_seconds,

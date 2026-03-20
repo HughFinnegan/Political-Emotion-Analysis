@@ -15,6 +15,11 @@ Example
 -------
 python process_all_videos.py --ref_dir refs_subject --max_minutes 5
 python process_all_videos.py --ref_dir refs_subject
+
+Notes:
+- By default this now analyses every eligible row (sample_step=1).
+- Continuity/hysteresis is OFF by default for simpler per-row labeling.
+- Enable continuity explicitly with --use_continuity.
 """
 
 from __future__ import annotations
@@ -220,7 +225,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--min_run_seconds", type=float, default=0.5)
     p.add_argument("--max_minutes", type=int, default=None)
     p.add_argument("--seek_mode", choices=["timestamp", "frame"], default="timestamp")
-    p.add_argument("--sample_step", type=int, default=30)
+    p.add_argument("--sample_step", type=int, default=1)
+    p.add_argument("--use_continuity", action="store_true", help="Enable continuity + hysteresis logic")
     p.add_argument("--conf_col", default=None)
     p.add_argument("--conf_thresh", type=float, default=0.0)
     p.add_argument(
@@ -269,6 +275,7 @@ def parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_args()
     cfg = FilterConfig(
+        use_continuity=args.use_continuity,
         sim_thresh_on=args.sim_thresh_on,
         sim_thresh_off=args.sim_thresh_off,
         min_run_seconds=args.min_run_seconds,
